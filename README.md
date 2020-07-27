@@ -1,0 +1,2 @@
+* 没有描述Personality和Emotion Threshold之间的关系
+* 没有描述Desire和Intention的具体内容
