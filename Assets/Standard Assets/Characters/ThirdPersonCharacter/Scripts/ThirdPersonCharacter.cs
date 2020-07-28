@@ -28,6 +28,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
 		Vector3 m_CapsuleCenter;
 		CapsuleCollider m_Capsule;
 		bool m_Crouching;
+		bool m_Walk = true;
 
 
 		void Start()
@@ -122,7 +123,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
 			m_Animator.SetFloat("Turn", m_TurnAmount, 0.1f, Time.deltaTime);
 			m_Animator.SetBool("Crouch", m_Crouching);
 			m_Animator.SetBool("OnGround", m_IsGrounded);
-			m_Animator.SetBool("Walk",true);
+			m_Animator.SetBool("Walk",m_Walk);//判断为步行还是跑步
 			if (!m_IsGrounded)
 			{
 				m_Animator.SetFloat("Jump", m_Rigidbody.velocity.y);
@@ -154,7 +155,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
 		}
 
 		public void SetWalk(bool isWalk){
-			m_Animator.SetBool("Walk",isWalk);
+			m_Walk=isWalk;
 		}
 
 
