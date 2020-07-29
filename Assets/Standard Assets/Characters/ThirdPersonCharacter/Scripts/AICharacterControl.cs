@@ -12,12 +12,15 @@ namespace UnityStandardAssets.Characters.ThirdPerson
         public UnityEngine.AI.NavMeshAgent agent { get; private set; }             // the navmesh agent required for the path finding
         public ThirdPersonCharacter character { get; private set; } // the character we are controlling
         public Transform target;                                    // target to aim for
+        public Transform safePlace;
         private Transform[] LeadPoints;
         //符合N(1,0.25)
-        public double neuroticism;                      //正态分布初始化neuroticism，Personality module中的一个元素，其他的没有看到算法，没有实现
-        private double fear,threshold,Sij=0.9;              //设置情绪激活的阈值为1-neuroticism，neuroticism越高，情绪阈值越低，越容易发生恐慌行为
-        private double Rji = 0.9;
-        private int k1,k2;
+        public double neuroticism,fear,threshold;                      //正态分布初始化neuroticism，Personality module中的一个元素，其他的没有看到算法，没有实现
+        private double deltaFear;              //设置情绪激活的阈值为1-neuroticism，neuroticism越高，情绪阈值越低，越容易发生恐慌行为
+        public double Sij,Rji;
+        public int k;//k1=300,k2=200;k=k1+k2
+        private bool activeFear=false;
+        // private bool activeRecover = false;
 
         private void Start()
         {
@@ -43,20 +46,95 @@ namespace UnityStandardAssets.Characters.ThirdPerson
 
             if (LeadPoints.Length>1)
                 ResetDestination();//第一次设置初始目标点
+
+            deltaFear=0;
+            Sij=0.7;
+            Rji=0.7;
+            k=500;
         }
 
 
-        private void Update()
+        private void Update()//更新动画
         {
-            if(fear>threshold){
-                character.SetWalk(false);
-            }
-            if (agent.remainingDistance > agent.stoppingDistance)
-                character.Move(agent.desiredVelocity, false, false);
-            else
-                ResetDestination();
-                // character.Move(Vector3.zero, false, false);
+            Collider[] colliders = Physics.OverlapSphere(this.transform.position, 1f,1 << LayerMask.NameToLayer("Dangerous"));
             
+            if(colliders.Length>0&&!activeFear){
+                fear = 0.89;
+                Debug.Log(this.transform.name+":"+colliders[0].gameObject.name);
+            }
+
+            if (agent.remainingDistance > agent.stoppingDistance){
+                character.Move(agent.desiredVelocity, false, false);
+                if(fear<0.35)
+                    character.setm_MoveSpeedMultiplier(0.015f);
+                else if(fear<0.8){
+                    character.setm_MoveSpeedMultiplier((10.5f*(float)fear-2.4f)*0.01f);
+                }else if(fear<0.9){
+                    character.setm_MoveSpeedMultiplier(0.06f);
+                }else
+                    character.setm_MoveSpeedMultiplier(0f);
+            }
+
+            else{
+                //不恐慌状态时才随机切换目的地
+                if(!activeFear){
+                    ResetDestination();
+                }else{
+                    character.Move(Vector3.zero, false, false);
+                }
+                
+            }
+                
+                
+        }
+
+        //设置0.5s为一个时间步长
+        private void FixedUpdate() {
+            
+            if(!activeFear){
+                //获取感知范围内的所有Agent的collider
+                Collider[] colliders = Physics.OverlapSphere(this.transform.position, 1f,1 << LayerMask.NameToLayer("Agent"));
+                 for (int i = 0; i < colliders.Length; i++){
+                    var gameObject = colliders[i].gameObject;
+                    if(this.name == gameObject.name){//删除自身
+                        continue;
+                    }
+                    double dis = Vector3.Distance(this.transform.position,gameObject.transform.position);//该方法的判断的是1m内是否有物体相交，但可能实际上两物体坐标距离超过1f
+                    deltaFear+=(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji;
+                    // Debug.Log(this.name+"|"+gameObject.transform.name+"|"+gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()+"|"+(1-(1/(1+Math.Exp(-dis))))+"|"+(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji);
+                 }
+            }
+            // Debug.Log ("FixedUpdate:"+this.name);  
+            StartCoroutine (AfterFixedUpdate());
+        }
+
+        IEnumerator AfterFixedUpdate()
+        {
+            // Debug.Log ("AfterFixedUpdate:"+this.name);
+            yield return new WaitForFixedUpdate();//加这一行后下面的代码会在所有FixedUpdate()完成后再执行
+            // Debug.Log ("AfterYield:"+this.name);
+            fear+=deltaFear;
+            
+            deltaFear=0;
+            //情绪计算完毕后为恐慌情绪，行为改为奔跑，Agent颜色改为红色
+            if(fear>threshold&&!activeFear){
+                activeFear=true;
+                character.SetWalk(false);//Agent动作改为跑步
+                foreach (Transform t in this.GetComponentsInChildren<Transform>())//情绪激活，变更颜色为红色
+                {
+                    if(t.name=="EthanBody")
+                    {
+                        t.GetComponent<Renderer>().material.color = Color.red; //使用Renderer和SkinnedMeshRenderer均可
+                        break;
+                    }
+                }
+                //Agent跑向安全位置
+                SetTarget(safePlace);
+                LeadPoints = target.GetComponentsInChildren<Transform>();
+                ResetDestination();
+                //k时间后恢复为可情绪感染状态
+
+            }
         }
 
         //设置目标物体的位置为目的地
@@ -71,11 +149,20 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             this.target = target;
         }
 
-        //修改不同类别的Agent的颜色
+        public void SetSafePlace(Transform safePlace){
+            this.safePlace=safePlace;
+        }
+
+        //初始化参数，并修改不同类别的Agent的颜色
         public void SetNeuroticism(double neuroticism){
             this.neuroticism=neuroticism;
             fear = neuroticism*0.1;     //初始化fear为neuroticism的一半
             threshold = 1-neuroticism;
+            if(threshold>0.8)
+                threshold = 0.8;
+            if(threshold<0.4)
+                threshold = 0.4;
+            k += (int)((neuroticism-0.5)*100);
             Color color = Color.grey;
             if(neuroticism<=0){
                 
@@ -97,9 +184,10 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             }
         }
 
+        //提供当前情绪供其他Agent获取
         public double GetEmotion(){
-            if(fear>threshold){
-                return fear;
+            if(activeFear){
+                return fear*Sij;
             }
             return 0;
         }

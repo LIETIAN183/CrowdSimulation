@@ -9,6 +9,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
     {
         public GameObject prefab;
         public Transform LeadPoint;
+        public Transform SafePlace;
         private NormalDistribution normal;
         public int count;
         // Start is called before the first frame update
@@ -32,8 +33,12 @@ namespace UnityStandardAssets.Characters.ThirdPerson
                 float z = UnityEngine.Random.Range(-5, 5);
                 Vector3 pos = new Vector3(x,0.2f,z);
                 //实例化
+                // string name = "Agent" + count;
                 var people = Instantiate(prefab,pos,Quaternion.identity);
+                people.name = "Agent" + count;//每个Agent命名
+                // people
                 people.GetComponent<AICharacterControl>().SetTarget(LeadPoint);//设置Agent闲逛时的目标物体集合
+                people.GetComponent<AICharacterControl>().SetSafePlace(SafePlace);//设置Agent闲逛时的目标物体集合
                 people.GetComponent<AICharacterControl>().SetNeuroticism(normal.NextDouble(0,1));//初始化目标物体的Neuroticism属性
                 --count;//控制Agent个数
             }

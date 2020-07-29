@@ -6,10 +6,13 @@ using UnityEngine;
 
 public class NormalDistribution : MonoBehaviour
 {
-    public double Mu;
-    public double Sigma;
-    
+    private double Mu=0.5,Sigma=0.25;
     private System.Random rand;
+
+    public void setParameter(double Mu, double Sigma){
+        this.Mu = Mu;
+        this.Sigma = Sigma;
+    }
 
     public double NextDouble()
     {

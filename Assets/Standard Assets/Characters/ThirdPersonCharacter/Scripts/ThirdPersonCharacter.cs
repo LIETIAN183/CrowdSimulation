@@ -158,6 +158,10 @@ namespace UnityStandardAssets.Characters.ThirdPerson
 			m_Walk=isWalk;
 		}
 
+		public void setm_MoveSpeedMultiplier(float m_MoveSpeedMultiplier){
+			this.m_MoveSpeedMultiplier=m_MoveSpeedMultiplier;
+		}
+
 
 		void HandleAirborneMovement()
 		{
