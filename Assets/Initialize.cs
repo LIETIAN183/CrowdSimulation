@@ -12,6 +12,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
         public Transform SafePlace;
         private NormalDistribution normal;
         public int count;
+        public GameObject fire;
         // Start is called before the first frame update
         void Start()
         {
@@ -21,9 +22,12 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             int iRoot = BitConverter.ToInt32(buffer, 0);//利用BitConvert方法把字节数组转换为整数
             UnityEngine.Random.InitState(iRoot);
             normal = GetComponent<NormalDistribution>();
-            
+            // Invoke("invokeTest",5.0f);
         }
 
+        private void invokeTest(){
+            fire.SetActive(true);
+        }
         // Update is called once per frame
         void Update()
         {
