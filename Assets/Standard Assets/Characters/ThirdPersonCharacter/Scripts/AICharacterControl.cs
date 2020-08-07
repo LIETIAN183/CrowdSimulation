@@ -20,6 +20,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
         public double Sij,Rji;
         public int k;//k1=300,k2=200;k=k1+k2
         private bool activeFear=false;
+        public int DetectedNumber;
         // private bool activeRecover = false;
 
         private void Start()
@@ -60,7 +61,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             
             if(colliders.Length>0&&!activeFear){
                 fear = 0.89;
-                Debug.Log(this.transform.name+":"+colliders[0].gameObject.name);
+                // Debug.Log(this.transform.name+":"+colliders[0].gameObject.name);
             }
 
             if (agent.remainingDistance > agent.stoppingDistance){
@@ -93,8 +94,22 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             
             if(!activeFear){
                 //获取感知范围内的所有Agent的collider
-                Collider[] colliders = Physics.OverlapSphere(this.transform.position, 1f,1 << LayerMask.NameToLayer("Agent"));
-                 for (int i = 0; i < colliders.Length; i++){
+                Collider[] colliders = Physics.OverlapSphere(this.transform.position, 1f,1 << LayerMask.NameToLayer("Agents"));
+                this.DetectedNumber=colliders.Length-1;
+                // if(colliders.Length>0){
+                //     for (int i = 0; i < colliders.Length; i++){
+                //         var gameObject = colliders[i].gameObject;
+                //         if(this.name == gameObject.name){//删除自身
+                //             continue;
+                //         }
+                //         Debug.Log(this.name+":"+gameObject.name);
+                //     }
+                // }
+                
+                // if(colliders.Length!=0){
+                //     Debug.Log(this.name+":"+colliders.Length);
+                // }
+                for (int i = 0; i < colliders.Length; i++){
                     var gameObject = colliders[i].gameObject;
                     if(this.name == gameObject.name){//删除自身
                         continue;
@@ -102,7 +117,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
                     double dis = Vector3.Distance(this.transform.position,gameObject.transform.position);//该方法的判断的是1m内是否有物体相交，但可能实际上两物体坐标距离超过1f
                     deltaFear+=(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji;
                     // Debug.Log(this.name+"|"+gameObject.transform.name+"|"+gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()+"|"+(1-(1/(1+Math.Exp(-dis))))+"|"+(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji);
-                 }
+                }
             }
             // Debug.Log ("FixedUpdate:"+this.name);  
             StartCoroutine (AfterFixedUpdate());
@@ -131,7 +146,12 @@ namespace UnityStandardAssets.Characters.ThirdPerson
                 //Agent跑向安全位置
                 SetTarget(safePlace);
                 LeadPoints = target.GetComponentsInChildren<Transform>();
-                ResetDestination();
+                // ResetDestination();
+                if(Vector3.Distance(this.transform.position,LeadPoints[1].position)<Vector3.Distance(this.transform.position,LeadPoints[2].position)){
+                    agent.SetDestination(LeadPoints[1].position);
+                }else{
+                    agent.SetDestination(LeadPoints[2].position);
+                }
                 //k时间后恢复为可情绪感染状态
 
             }

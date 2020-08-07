@@ -22,7 +22,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             int iRoot = BitConverter.ToInt32(buffer, 0);//利用BitConvert方法把字节数组转换为整数
             UnityEngine.Random.InitState(iRoot);
             normal = GetComponent<NormalDistribution>();
-            // Invoke("invokeTest",5.0f);
+            Invoke("invokeTest",5.0f);
         }
 
         private void invokeTest(){
