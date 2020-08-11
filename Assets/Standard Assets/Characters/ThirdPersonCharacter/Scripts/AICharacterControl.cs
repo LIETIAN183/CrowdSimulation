@@ -23,6 +23,11 @@ namespace UnityStandardAssets.Characters.ThirdPerson
         public int DetectedNumber;
         // private bool activeRecover = false;
 
+        public float timeStep=0.1f;
+        public float timeSteptmp=0f;
+        public Collider[] colliders;
+        private Vector3 offset = new Vector3(0.0f,0.1f,0.0f);
+
         private void Start()
         {
             // get the components on the object we need ( should not be null due to require component so no need to check )
@@ -54,76 +59,125 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             k=500;
         }
 
-
         private void Update()//更新动画
         {
-            Collider[] colliders = Physics.OverlapSphere(this.transform.position, 1f,1 << LayerMask.NameToLayer("Dangerous"));
+            colliders = Physics.OverlapSphere(this.transform.position, 1,1 << LayerMask.NameToLayer("Dangerous"));
             
             if(colliders.Length>0&&!activeFear){
                 fear = 0.89;
-                // Debug.Log(this.transform.name+":"+colliders[0].gameObject.name);
             }
 
+
+            colliders = Physics.OverlapSphere(this.transform.position+offset, 1f,1 << LayerMask.NameToLayer("Agents"));
+            timeSteptmp+=Time.deltaTime;
+            if(timeSteptmp>timeStep){
+                detectEmotion();
+                timeSteptmp=0f;
+            }
+            
             if (agent.remainingDistance > agent.stoppingDistance){
                 character.Move(agent.desiredVelocity, false, false);
                 if(fear<0.35)
                     character.setm_MoveSpeedMultiplier(0.015f);
-                else if(fear<0.8){
+                else if(fear<0.8)
                     character.setm_MoveSpeedMultiplier((10.5f*(float)fear-2.4f)*0.01f);
-                }else if(fear<0.9){
+                else if(fear<0.9)
                     character.setm_MoveSpeedMultiplier(0.06f);
-                }else
+                else
                     character.setm_MoveSpeedMultiplier(0f);
             }
-
             else{
                 //不恐慌状态时才随机切换目的地
-                if(!activeFear){
+                if(!activeFear)
                     ResetDestination();
-                }else{
+                else
                     character.Move(Vector3.zero, false, false);
-                }
-                
-            }
-                
-                
+            }   
+
+            
         }
 
-        //设置0.5s为一个时间步长
-        private void FixedUpdate() {
-            
+        private void detectEmotion(){
             if(!activeFear){
                 //获取感知范围内的所有Agent的collider
-                Collider[] colliders = Physics.OverlapSphere(this.transform.position, 1f,1 << LayerMask.NameToLayer("Agents"));
-                this.DetectedNumber=colliders.Length-1;
-                // if(colliders.Length>0){
-                //     for (int i = 0; i < colliders.Length; i++){
-                //         var gameObject = colliders[i].gameObject;
-                //         if(this.name == gameObject.name){//删除自身
-                //             continue;
-                //         }
-                //         Debug.Log(this.name+":"+gameObject.name);
-                //     }
-                // }
                 
-                // if(colliders.Length!=0){
-                //     Debug.Log(this.name+":"+colliders.Length);
-                // }
-                for (int i = 0; i < colliders.Length; i++){
-                    var gameObject = colliders[i].gameObject;
+                // this.DetectedNumber=colliders.Length-1;
+                foreach (Collider c in colliders){
+                    var gameObject = c.gameObject;
                     if(this.name == gameObject.name){//删除自身
                         continue;
                     }
                     double dis = Vector3.Distance(this.transform.position,gameObject.transform.position);//该方法的判断的是1m内是否有物体相交，但可能实际上两物体坐标距离超过1f
                     deltaFear+=(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji;
-                    // Debug.Log(this.name+"|"+gameObject.transform.name+"|"+gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()+"|"+(1-(1/(1+Math.Exp(-dis))))+"|"+(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji);
                 }
-            }
-            // Debug.Log ("FixedUpdate:"+this.name);  
-            StartCoroutine (AfterFixedUpdate());
+            } 
+            // StartCoroutine (UpdateEmotion());
         }
 
-        IEnumerator AfterFixedUpdate()
+        private void LateUpdate() {
+            
+            fear+=deltaFear;
+            deltaFear=0;
+            //情绪计算完毕后为恐慌情绪，行为改为奔跑，Agent颜色改为红色
+            if(fear>threshold&&!activeFear){
+                activeFear=true;
+                character.SetWalk(false);//Agent动作改为跑步
+                foreach (Transform t in this.GetComponentsInChildren<Transform>())//情绪激活，变更颜色为红色
+                {
+                    if(t.name=="EthanBody")
+                    {
+                        t.GetComponent<Renderer>().material.color = Color.red; //使用Renderer和SkinnedMeshRenderer均可
+                        break;
+                    }
+                }
+                //Agent跑向安全位置
+                SetTarget(safePlace);
+                LeadPoints = target.GetComponentsInChildren<Transform>();
+                // ResetDestination();
+                if(Vector3.Distance(this.transform.position,LeadPoints[1].position)<Vector3.Distance(this.transform.position,LeadPoints[2].position)){
+                    agent.SetDestination(LeadPoints[1].position);
+                }else{
+                    agent.SetDestination(LeadPoints[2].position);
+                }
+                //k时间后恢复为可情绪感染状态
+            }
+            
+        }
+        // //设置0.5s为一个时间步长
+        // private void FixedUpdate() {
+            
+        //     if(!activeFear){
+        //         //获取感知范围内的所有Agent的collider
+        //         Collider[] colliders = Physics.OverlapSphere(this.transform.position, 1f,1 << LayerMask.NameToLayer("Agents"));
+        //         this.DetectedNumber=colliders.Length-1;
+        //         // if(colliders.Length>0){
+        //         //     for (int i = 0; i < colliders.Length; i++){
+        //         //         var gameObject = colliders[i].gameObject;
+        //         //         if(this.name == gameObject.name){//删除自身
+        //         //             continue;
+        //         //         }
+        //         //         Debug.Log(this.name+":"+gameObject.name);
+        //         //     }
+        //         // }
+                
+        //         // if(colliders.Length!=0){
+        //         //     Debug.Log(this.name+":"+colliders.Length);
+        //         // }
+        //         for (int i = 0; i < colliders.Length; i++){
+        //             var gameObject = colliders[i].gameObject;
+        //             if(this.name == gameObject.name){//删除自身
+        //                 continue;
+        //             }
+        //             double dis = Vector3.Distance(this.transform.position,gameObject.transform.position);//该方法的判断的是1m内是否有物体相交，但可能实际上两物体坐标距离超过1f
+        //             deltaFear+=(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji;
+        //             // Debug.Log(this.name+"|"+gameObject.transform.name+"|"+gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()+"|"+(1-(1/(1+Math.Exp(-dis))))+"|"+(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji);
+        //         }
+        //     }
+        //     // Debug.Log ("FixedUpdate:"+this.name);  
+        //     StartCoroutine (AfterFixedUpdate());
+        // }
+
+        IEnumerator UpdateEmotion()
         {
             // Debug.Log ("AfterFixedUpdate:"+this.name);
             yield return new WaitForFixedUpdate();//加这一行后下面的代码会在所有FixedUpdate()完成后再执行
@@ -171,6 +225,10 @@ namespace UnityStandardAssets.Characters.ThirdPerson
 
         public void SetSafePlace(Transform safePlace){
             this.safePlace=safePlace;
+        }
+
+        public void SetTimeStep(float timeStep){
+            this.timeStep=timeStep;
         }
 
         //初始化参数，并修改不同类别的Agent的颜色

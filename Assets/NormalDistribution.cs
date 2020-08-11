@@ -37,10 +37,13 @@ public class NormalDistribution : MonoBehaviour
         return randNormal;
     }
     
+    private void Awake() {
+        rand = new System.Random((int)DateTime.UtcNow.Ticks);
+    }
     // Start is called before the first frame update
     void Start()
     {
-        rand = new System.Random((int)DateTime.UtcNow.Ticks);
+        
     }
 
     // Update is called once per frame
