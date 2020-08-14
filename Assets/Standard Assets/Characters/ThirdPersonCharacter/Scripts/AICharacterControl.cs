@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 using System.Collections;
-
+using System.Collections.Generic;
 
 namespace UnityStandardAssets.Characters.ThirdPerson
 {
@@ -16,17 +16,20 @@ namespace UnityStandardAssets.Characters.ThirdPerson
         private Transform[] LeadPoints;
         //符合N(1,0.25)
         public double neuroticism,fear,threshold;                      //正态分布初始化neuroticism，Personality module中的一个元素，其他的没有看到算法，没有实现
-        private double deltaFear;              //设置情绪激活的阈值为1-neuroticism，neuroticism越高，情绪阈值越低，越容易发生恐慌行为
+        private double deltaFear=0;              //设置情绪激活的阈值为1-neuroticism，neuroticism越高，情绪阈值越低，越容易发生恐慌行为
         public double Sij,Rji;
-        public int k;//k1=300,k2=200;k=k1+k2
+        public int k1,k2;//k1=300,k2=200;k=k1+k2
         private bool activeFear=false;
-        public int DetectedNumber;
         // private bool activeRecover = false;
 
         public float timeStep=0.1f;
         public float timeSteptmp=0f;
-        public Collider[] colliders;
+        private List<Collider> colliders = new List<Collider>();
+        public Collider[] show;
         private Vector3 offset = new Vector3(0.0f,0.1f,0.0f);
+
+        private Renderer renderer;
+        private Color colorBack;
 
         private void Start()
         {
@@ -53,22 +56,25 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             if (LeadPoints.Length>1)
                 ResetDestination();//第一次设置初始目标点
 
-            deltaFear=0;
+            
             Sij=0.7;
             Rji=0.7;
-            k=500;
         }
 
         private void Update()//更新动画
         {
-            colliders = Physics.OverlapSphere(this.transform.position, 1,1 << LayerMask.NameToLayer("Dangerous"));
-            
-            if(colliders.Length>0&&!activeFear){
-                fear = 0.89;
+            if(!activeFear){
+                Collider[] cs = Physics.OverlapSphere(this.transform.position, 1,1 << LayerMask.NameToLayer("Dangerous"));
+                if(cs.Length>0){
+                    fear = 0.81;
+                }
             }
 
-
-            colliders = Physics.OverlapSphere(this.transform.position+offset, 1f,1 << LayerMask.NameToLayer("Agents"));
+            HashSet<Collider> set = new HashSet<Collider>(colliders);
+            colliders = new List<Collider>(set);
+            show = colliders.ToArray();
+            
+            //colliders = Physics.OverlapSphere(this.transform.position+offset, 1f);
             timeSteptmp+=Time.deltaTime;
             if(timeSteptmp>timeStep){
                 detectEmotion();
@@ -76,7 +82,6 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             }
             
             if (agent.remainingDistance > agent.stoppingDistance){
-                character.Move(agent.desiredVelocity, false, false);
                 if(fear<0.35)
                     character.setm_MoveSpeedMultiplier(0.015f);
                 else if(fear<0.8)
@@ -85,6 +90,8 @@ namespace UnityStandardAssets.Characters.ThirdPerson
                     character.setm_MoveSpeedMultiplier(0.06f);
                 else
                     character.setm_MoveSpeedMultiplier(0f);
+
+                character.Move(agent.desiredVelocity, false, false);
             }
             else{
                 //不恐慌状态时才随机切换目的地
@@ -99,37 +106,25 @@ namespace UnityStandardAssets.Characters.ThirdPerson
 
         private void detectEmotion(){
             if(!activeFear){
-                //获取感知范围内的所有Agent的collider
-                
-                // this.DetectedNumber=colliders.Length-1;
                 foreach (Collider c in colliders){
-                    var gameObject = c.gameObject;
-                    if(this.name == gameObject.name){//删除自身
-                        continue;
-                    }
-                    double dis = Vector3.Distance(this.transform.position,gameObject.transform.position);//该方法的判断的是1m内是否有物体相交，但可能实际上两物体坐标距离超过1f
-                    deltaFear+=(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji;
+                    var ts = c.gameObject.transform;
+                    double dis = Vector3.Distance(this.transform.position,ts.position);//该方法的判断的是1m内是否有物体相交，但可能实际上两物体坐标距离超过1f
+                    deltaFear+=(1-(1/(1+Math.Exp(-dis))))*ts.GetComponent<AICharacterControl>().GetEmotion()*Rji*fear;
                 }
-            } 
-            // StartCoroutine (UpdateEmotion());
+            }
         }
 
         private void LateUpdate() {
             
+            colliders.Clear();
+            
             fear+=deltaFear;
             deltaFear=0;
             //情绪计算完毕后为恐慌情绪，行为改为奔跑，Agent颜色改为红色
             if(fear>threshold&&!activeFear){
                 activeFear=true;
                 character.SetWalk(false);//Agent动作改为跑步
-                foreach (Transform t in this.GetComponentsInChildren<Transform>())//情绪激活，变更颜色为红色
-                {
-                    if(t.name=="EthanBody")
-                    {
-                        t.GetComponent<Renderer>().material.color = Color.red; //使用Renderer和SkinnedMeshRenderer均可
-                        break;
-                    }
-                }
+                renderer.material.color = Color.red;
                 //Agent跑向安全位置
                 SetTarget(safePlace);
                 LeadPoints = target.GetComponentsInChildren<Transform>();
@@ -140,74 +135,14 @@ namespace UnityStandardAssets.Characters.ThirdPerson
                     agent.SetDestination(LeadPoints[2].position);
                 }
                 //k时间后恢复为可情绪感染状态
+                Invoke("recoverStep1",k1);
+                Invoke("recoverStep2",k1+k2);
             }
-            
         }
-        // //设置0.5s为一个时间步长
-        // private void FixedUpdate() {
-            
-        //     if(!activeFear){
-        //         //获取感知范围内的所有Agent的collider
-        //         Collider[] colliders = Physics.OverlapSphere(this.transform.position, 1f,1 << LayerMask.NameToLayer("Agents"));
-        //         this.DetectedNumber=colliders.Length-1;
-        //         // if(colliders.Length>0){
-        //         //     for (int i = 0; i < colliders.Length; i++){
-        //         //         var gameObject = colliders[i].gameObject;
-        //         //         if(this.name == gameObject.name){//删除自身
-        //         //             continue;
-        //         //         }
-        //         //         Debug.Log(this.name+":"+gameObject.name);
-        //         //     }
-        //         // }
-                
-        //         // if(colliders.Length!=0){
-        //         //     Debug.Log(this.name+":"+colliders.Length);
-        //         // }
-        //         for (int i = 0; i < colliders.Length; i++){
-        //             var gameObject = colliders[i].gameObject;
-        //             if(this.name == gameObject.name){//删除自身
-        //                 continue;
-        //             }
-        //             double dis = Vector3.Distance(this.transform.position,gameObject.transform.position);//该方法的判断的是1m内是否有物体相交，但可能实际上两物体坐标距离超过1f
-        //             deltaFear+=(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji;
-        //             // Debug.Log(this.name+"|"+gameObject.transform.name+"|"+gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()+"|"+(1-(1/(1+Math.Exp(-dis))))+"|"+(1-(1/(1+Math.Exp(-dis))))*gameObject.transform.GetComponent<AICharacterControl>().GetEmotion()*Rji);
-        //         }
-        //     }
-        //     // Debug.Log ("FixedUpdate:"+this.name);  
-        //     StartCoroutine (AfterFixedUpdate());
-        // }
 
-        IEnumerator UpdateEmotion()
-        {
-            // Debug.Log ("AfterFixedUpdate:"+this.name);
-            yield return new WaitForFixedUpdate();//加这一行后下面的代码会在所有FixedUpdate()完成后再执行
-            // Debug.Log ("AfterYield:"+this.name);
-            fear+=deltaFear;
-            
-            deltaFear=0;
-            //情绪计算完毕后为恐慌情绪，行为改为奔跑，Agent颜色改为红色
-            if(fear>threshold&&!activeFear){
-                activeFear=true;
-                character.SetWalk(false);//Agent动作改为跑步
-                foreach (Transform t in this.GetComponentsInChildren<Transform>())//情绪激活，变更颜色为红色
-                {
-                    if(t.name=="EthanBody")
-                    {
-                        t.GetComponent<Renderer>().material.color = Color.red; //使用Renderer和SkinnedMeshRenderer均可
-                        break;
-                    }
-                }
-                //Agent跑向安全位置
-                SetTarget(safePlace);
-                LeadPoints = target.GetComponentsInChildren<Transform>();
-                // ResetDestination();
-                if(Vector3.Distance(this.transform.position,LeadPoints[1].position)<Vector3.Distance(this.transform.position,LeadPoints[2].position)){
-                    agent.SetDestination(LeadPoints[1].position);
-                }else{
-                    agent.SetDestination(LeadPoints[2].position);
-                }
-                //k时间后恢复为可情绪感染状态
-
+        private void OnTriggerStay(Collider other) {
+            if(other is SphereCollider && other.tag == "Agent"){
+                colliders.Add(other);
             }
         }
 
@@ -227,9 +162,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             this.safePlace=safePlace;
         }
 
-        public void SetTimeStep(float timeStep){
-            this.timeStep=timeStep;
-        }
+        
 
         //初始化参数，并修改不同类别的Agent的颜色
         public void SetNeuroticism(double neuroticism){
@@ -238,9 +171,12 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             threshold = 1-neuroticism;
             if(threshold>0.8)
                 threshold = 0.8;
-            if(threshold<0.4)
+            if(threshold<0.4){
                 threshold = 0.4;
-            k += (int)((neuroticism-0.5)*100);
+            }
+
+            this.k1 = 300 + (int)((neuroticism-0.5)*200);
+            k2=200;
             Color color = Color.grey;
             if(neuroticism<=0){
                 
@@ -256,18 +192,53 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             {
                 if(t.name=="EthanBody")
                 {
-                    t.GetComponent<Renderer>().material.color = color; //使用Renderer和SkinnedMeshRenderer均可
+                    renderer =  t.GetComponent<Renderer>(); //使用Renderer和SkinnedMeshRenderer均可
                     break;
                 }
             }
+            renderer.material.color = color;
+            colorBack =color;
         }
 
         //提供当前情绪供其他Agent获取
         public double GetEmotion(){
             if(activeFear){
-                return fear*Sij;
+                return Sij;
             }
             return 0;
+        }
+
+        //情绪恢复
+        private void recoverStep1(){
+            fear= neuroticism*0.1;
+            character.SetWalk(true);
+            renderer.material.color = colorBack;
+            deltaFear=0;
+        }
+        
+        private void recoverStep2(){
+            activeFear = false;
+        }
+
+        //UI设置界面
+        public void SetTimeStep(float timeStep){
+            this.timeStep=timeStep;
+        }
+
+        public void setK1(int k1){
+            this.k1=k1;
+        }
+
+        public void setK2(int k2){
+            this.k2=k2;
+        }
+
+        public void setRji(double Rji){
+            this.Rji=Rji;
+        }
+
+        public void setSij(double Sij){
+            this.Sij=Sij;
         }
     }
 }
